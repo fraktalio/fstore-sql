@@ -416,3 +416,31 @@ CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id uuid, v_offset BI
                 RETURNING *;
     END;
 ' LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id TEXT)
+    RETURNS SETOF "locks" AS
+'
+    BEGIN
+        -- Nack: Update locked status to false, without updating the offset
+        RETURN QUERY
+            UPDATE locks
+                SET locked_until = NOW() -- locked = false
+                WHERE "view" = v_view
+                    AND decider_id = v_decider_id
+                RETURNING *;
+    END;
+' LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id TEXT, v_milliseconds BIGINT)
+    RETURNS SETOF "locks" AS
+'
+    BEGIN
+        -- Schedule the nack
+        RETURN QUERY
+            UPDATE locks
+                SET "locked_until" = NOW() + (v_milliseconds || ''ms'')::INTERVAL
+                WHERE "view" = v_view
+                    AND decider_id = v_decider_id
+                RETURNING *;
+    END;
+' LANGUAGE plpgsql;
