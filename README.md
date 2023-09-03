@@ -1,7 +1,7 @@
 # fstore-sql (event store based on the Postgres database)
 
 This project is enabling event-sourcing and *pool-based* event-streaming patterns by using SQL (PostgreSQL) only.
-No additional tools, frameworks or programming languages are required at this level.
+No additional tools, frameworks, or programming languages are required at this level.
 
 - `event-sourcing` data pattern (by using PostgreSQL database) to durably store events
     - Append events to the ordered, append-only log, using `entity id`/`decider id` as a key
@@ -10,6 +10,8 @@ No additional tools, frameworks or programming languages are required at this le
     - Support optimistic locking/concurrency
 - `event-streaming` to concurrently coordinate read over a streams of messages from multiple consumer instances
     - Support real-time concurrent consumers to project events to view/query models
+ 
+Every decider/entity stream of events is an independent **partition**. The events within a partition are totally ordered. **There is no ordering guarantee across different partitions**.
 
 
 The SQL functions and schema we provided you with can help you to persist, query and stream events, but the
