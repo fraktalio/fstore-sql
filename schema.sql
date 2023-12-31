@@ -270,7 +270,7 @@ CREATE OR REPLACE FUNCTION on_insert_or_update_on_views() RETURNS trigger AS
                         WHERE t2.decider_id = t1.decider_id
                         ORDER BY "t2"."offset" DESC
                         LIMIT 1)
-                   )         AS last_offset,
+               )             AS last_offset,
                NOW()         AS locked_until,
                t1.final      AS offset_final
         FROM (SELECT DISTINCT ON (decider_id) decider_id AS decider_id,
@@ -280,8 +280,8 @@ CREATE OR REPLACE FUNCTION on_insert_or_update_on_views() RETURNS trigger AS
               ORDER BY decider_id, "offset" DESC) AS t1
         ON CONFLICT ON CONSTRAINT "locks_pkey"
             DO UPDATE
-            SET "offset"    = EXCLUDED."offset",
-                last_offset = EXCLUDED.last_offset,
+            SET "offset"     = EXCLUDED."offset",
+                last_offset  = EXCLUDED.last_offset,
                 offset_final = EXCLUDED.offset_final;
         RETURN NEW;
     END;
@@ -311,11 +311,10 @@ EXECUTE FUNCTION on_insert_or_update_on_views();
 CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT)
     RETURNS SETOF deciders AS
 '
-    BEGIN
-        RETURN QUERY
-            INSERT INTO deciders (decider, event) VALUES (v_decider, v_event) RETURNING *;
-    END;
-' LANGUAGE plpgsql;
+    INSERT INTO deciders (decider, event)
+    VALUES (v_decider, v_event)
+    RETURNING *;
+' LANGUAGE sql;
 
 -- Append/Insert new 'event'
 -- Example of usage: SELECT * from append_event('event1', '21e19516-9bda-11ed-a8fc-0242ac120002', 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null)
@@ -323,12 +322,10 @@ CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider
                                         v_command_id UUID, v_previous_id UUID)
     RETURNS SETOF events AS
 '
-    BEGIN
-        RETURN QUERY INSERT INTO events (event, event_id, decider, decider_id, data, command_id, previous_id)
-            VALUES (v_event, v_event_id, v_decider, v_decider_id, v_data, v_command_id, v_previous_id)
-            RETURNING *;
-    END;
-' LANGUAGE plpgsql;
+    INSERT INTO events (event, event_id, decider, decider_id, data, command_id, previous_id)
+    VALUES (v_event, v_event_id, v_decider, v_decider_id, v_data, v_command_id, v_previous_id)
+    RETURNING *;
+' LANGUAGE sql;
 
 -- Get events by decider_id
 -- Used by the Decider/Entity to get list of events from where it can source its own state
@@ -336,13 +333,21 @@ CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider
 CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID)
     RETURNS SETOF events AS
 '
-    BEGIN
-        RETURN QUERY SELECT *
-                     FROM events
-                     WHERE decider_id = v_decider_id
-                     ORDER BY "offset";
-    END;
-' LANGUAGE plpgsql;
+    SELECT *
+    FROM events
+    WHERE decider_id = v_decider_id
+    ORDER BY "offset";
+' LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID)
+    RETURNS SETOF events AS
+'
+    SELECT *
+    FROM events
+    WHERE decider_id = v_decider_id
+    ORDER BY "offset" DESC
+    LIMIT 1;
+' LANGUAGE sql;
 
 -- #######################################################################################
 -- ######                                EVENT STREAMING                            ######
@@ -354,12 +359,10 @@ CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID)
 CREATE OR REPLACE FUNCTION register_view(v_view TEXT, v_pooling_delay BIGINT, v_start_at TIMESTAMP)
     RETURNS SETOF "views" AS
 '
-    BEGIN
-        RETURN QUERY
-            INSERT INTO "views" ("view", pooling_delay, start_at)
-                VALUES (v_view, v_pooling_delay, v_start_at) RETURNING *;
-    END;
-' LANGUAGE plpgsql;
+    INSERT INTO "views" ("view", pooling_delay, start_at)
+    VALUES (v_view, v_pooling_delay, v_start_at)
+    RETURNING *;
+' LANGUAGE sql;
 
 -- Get event(s) for the view - event streaming to concurrent consumers in a safe way
 -- Concurrent Views/Subscribers can not stream/read events from one decider_id stream (partition) at the same time, because `lock` is preventing it.
@@ -368,36 +371,30 @@ CREATE OR REPLACE FUNCTION register_view(v_view TEXT, v_pooling_delay BIGINT, v_
 CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT)
     RETURNS SETOF events AS
 '
-    DECLARE
-        v_last_offset INTEGER;
-        v_decider_id  UUID;
-    BEGIN
-        -- Check if there are events with a greater id than the last_offset and acquire lock on views table/row for the first decider_id/stream you can find
-        SELECT decider_id, last_offset
-        INTO v_decider_id, v_last_offset
-        FROM locks
-        WHERE view = v_view_name
-          AND locked_until < NOW() -- locked = false
-          AND last_offset < "offset"
-        ORDER BY "offset"
-        LIMIT 1 FOR UPDATE SKIP LOCKED;
-
-        -- Update views locked status to true
-        UPDATE locks
-        SET locked_until = NOW() + INTERVAL ''5m'' -- locked = true, for next 5 minutes
-        WHERE view = v_view_name
-          AND locked_until < NOW() -- locked = false
-          AND decider_id = v_decider_id;
-
-        -- Return the events that have not been locked yet
-        RETURN QUERY SELECT *
-                     FROM events
-                     WHERE decider_id = v_decider_id
-                       AND "offset" > v_last_offset
-                     ORDER BY "offset"
-                     LIMIT 1;
-    END;
-' LANGUAGE plpgsql;
+    WITH locked_view AS (SELECT decider_id, last_offset
+                         FROM locks
+                         WHERE view = v_view_name
+                           AND locked_until < NOW()
+                           AND last_offset < "offset"
+                         ORDER BY "offset"
+                         LIMIT 1 FOR UPDATE SKIP LOCKED),
+         update_locks AS (
+             UPDATE locks
+                 SET locked_until = NOW() + INTERVAL ''5m''
+                 FROM locked_view
+                 WHERE locks.view = v_view_name
+                     AND locks.decider_id = locked_view.decider_id
+                 RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset)
+    SELECT *
+    FROM events
+    WHERE decider_id = (SELECT decider_id
+                        FROM update_locks)
+      AND "offset" > (SELECT last_offset
+                      FROM update_locks)
+    ORDER BY "offset"
+    LIMIT 1;
+'
+    LANGUAGE sql;
 
 -- Acknowledge that event with `decider_id` and `offset` is processed by the view
 -- Essentially, it will unlock current decider_id stream (partition) for further reading
@@ -405,42 +402,31 @@ CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT)
 CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id uuid, v_offset BIGINT)
     RETURNS SETOF "locks" AS
 '
-    BEGIN
-        -- Update locked status to false
-        RETURN QUERY
-            UPDATE locks
-                SET locked_until = NOW(), -- locked = false,
-                    last_offset = v_offset
-                WHERE "view" = v_view
-                    AND decider_id = v_decider_id
-                RETURNING *;
-    END;
-' LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id TEXT)
+    UPDATE locks
+    SET locked_until = NOW(), -- locked = false,
+        last_offset  = v_offset
+    WHERE "view" = v_view
+      AND decider_id = v_decider_id
+    RETURNING *;
+' LANGUAGE sql;
+
+CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id UUID)
     RETURNS SETOF "locks" AS
 '
-    BEGIN
-        -- Nack: Update locked status to false, without updating the offset
-        RETURN QUERY
-            UPDATE locks
-                SET locked_until = NOW() -- locked = false
-                WHERE "view" = v_view
-                    AND decider_id = v_decider_id
-                RETURNING *;
-    END;
-' LANGUAGE plpgsql;
+    UPDATE locks
+    SET locked_until = NOW() -- locked = false
+    WHERE "view" = v_view
+      AND decider_id = v_decider_id
+    RETURNING *;
+' LANGUAGE sql;
 
-CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id TEXT, v_milliseconds BIGINT)
+CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id UUID, v_milliseconds BIGINT)
     RETURNS SETOF "locks" AS
 '
-    BEGIN
-        -- Schedule the nack
-        RETURN QUERY
-            UPDATE locks
-                SET "locked_until" = NOW() + (v_milliseconds || ''ms'')::INTERVAL
-                WHERE "view" = v_view
-                    AND decider_id = v_decider_id
-                RETURNING *;
-    END;
-' LANGUAGE plpgsql;
+    UPDATE locks
+    SET "locked_until" = NOW() + (v_milliseconds || ''ms'')::INTERVAL
+    WHERE "view" = v_view
+      AND decider_id = v_decider_id
+    RETURNING *;
+' LANGUAGE sql;
