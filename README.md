@@ -113,7 +113,7 @@ from append_event('event2', 'eb411c34-9d64-11ed-a8fc-0242ac120002', 'decider1', 
 
 ```sql
 SELECT *
-from get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002');
+from get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'decider1');
 ```
 
 ### Event streaming

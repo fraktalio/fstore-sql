@@ -327,19 +327,21 @@ CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider
     RETURNING *;
 ' LANGUAGE sql;
 
--- Get events by decider_id
+-- Get events by decider_id and decider type
 -- Used by the Decider/Entity to get list of events from where it can source its own state
--- Example of usage: SELECT * FROM get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002')
-CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID)
+-- Example of usage: SELECT * FROM get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'decider1')
+CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID, v_decider TEXT)
     RETURNS SETOF events AS
 '
     SELECT *
     FROM events
     WHERE decider_id = v_decider_id
+        AND decider = v_decider
     ORDER BY "offset";
 ' LANGUAGE sql;
 
-CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID)
+-- Get the lass event by decider_id and decider type
+CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID, v_decider TEXT)
     RETURNS SETOF events AS
 '
     SELECT *
