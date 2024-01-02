@@ -1,4 +1,4 @@
-# fstore-sql (event store based on the Postgres database)
+# fstore-sql (event-store, based on `postgres`)
 
 This project offers a seamless platform for efficiently prototyping event-sourcing and event-streaming without the need for additional infrastructural components.
 
@@ -18,19 +18,19 @@ Every decider/entity stream of events is an independent **partition**. The event
 
 ## Design
 
-The SQL functions and schema we provide will help you to persist, query and stream events in a robust way, but the
+The SQL functions and schema we provide will help you to persist, query, and stream events in a robust way, but the
 **decision-making** and **view-handling** logic would be something that you would have to implement on your own.
 
- - Decision-making process is a **command handler** that is responsible for handling the command/intent and producing new events/facts.
-   - We call this function a **decider**.
-   - You can run it as an edge-function on [Deno](https://deno.com/deploy).
- - View-handling process is an **event handler** that is responsible for handling the event/fact and producing new view/query model.
-   - We call this function a **view**.
-   - You can run it as an edge-function on [Deno](https://deno.com/deploy).
-   - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge-function (view) to handle the `event`.
+ - The decision-making process is a **command handler** responsible for handling the command/intent and producing new events/facts.
+   - We call this function a **decide**.
+   - You can run it as an edge function on [Deno](https://deno.com/deploy).
+ - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model.
+   - We call this function a **evolve**.
+   - You can run it as an edge function on [Deno](https://deno.com/deploy).
+   - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view) to handle the `event`.
      handler.
  
-Consider [Supabase](https://supabase.io/) as a Postgres database on steroids, with a built-in Authentication, instant APIs, Edge Functions, Realtime subscriptions, Storage, and Vector embeddings...
+Consider [Supabase](https://supabase.io/) as a Postgres database on steroids, with built-in Authentication, instant APIs, Edge Functions, real-time subscriptions, Storage, and Vector embeddings...
 
 ## fmodel
 
