@@ -2,6 +2,8 @@
 
 This project offers a seamless platform for efficiently prototyping event-sourcing and event-streaming without the need for additional infrastructural components.
 
+**Check the [schema.sql](schema.sql)! It is all there!**
+
 No additional tools, frameworks, or programming languages are required at this level.
 
 - `event-sourcing` data pattern (by using Postgres database) to durably store events
