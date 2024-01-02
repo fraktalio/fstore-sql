@@ -1,0 +1,11 @@
+services:
+  db:
+    # 15.1.0.82 version supports sub-minute pg_cron extension. Supabase removed it later as the change was not backwards compatible
+    # https://github.com/supabase/postgres/releases/tag/15.1.0.82
+    # https://github.com/orgs/supabase/discussions/18274
+    image: supabase/postgres:15.1.0.82
+    ports:
+      - "5432:5432"
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword
