@@ -215,7 +215,7 @@ Import the [extensions.sql](extensions.sql) into your database.
 
 It is very similar to the `6a` case. The difference is that the cron job will run `SELECT * from stream_events('view1');` for you, and publish event(s) to your edge-functions/http endpoints automatically. So, the database is doing all the job. 
 
-The `cron` job is managed(created/deleted) by triggers on the `view` table (uncomment the triggers in [schema.sql](schema.sql) to enable it!). So, whenever you register a new View, the cron job will be created automatically.
+The `cron` job is managed(created/deleted) by triggers on the `view` table. So, whenever you register a new View, the cron job will be created automatically.
 
 ## Try YugabyteDB
 
