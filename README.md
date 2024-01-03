@@ -72,7 +72,7 @@ SELECT *
 from register_decider_event('decider1', 'event2');
 ```
 
-##### 2. Appending two events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`.
+#### 2. Appending two events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`.
 
 Multiple constraints are applied to `events` table to ensure bad events do not make their way into the system.
 This includes duplicated events, incorrect naming (event and decider names cannot be misspelled, and the client cannot insert an event from the wrong decider), ensured sequential events, disallowed delete, and disallowed update.
@@ -88,7 +88,7 @@ from append_event('event2', 'eb411c34-9d64-11ed-a8fc-0242ac120002', 'decider1', 
                   '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '21e19516-9bda-11ed-a8fc-0242ac120002');
 ```
 
-##### 3. Get/List events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`
+#### 3. Get/List events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`
 
 ```sql
 SELECT *
@@ -97,7 +97,7 @@ from get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'decider1');
 
 ### Event Streaming
 
-##### 4. Registering a (materialized) view `view1` with 1 second pooling frequency, starting from 28th Jan.
+#### 4. Registering a (materialized) view `view1` with 1 second pooling frequency, starting from 28th Jan.
 
 The `View` must be registered before events can be streamed to it.
 This streaming is kafka-like, in that it is modeling the concept of partitions and offsets.
@@ -114,7 +114,7 @@ SELECT *
 from register_view('view1', 1, '2023-01-28 12:17:17.078384', 300, 'https://localhost:3000/functions/v1/event-handler');
 ```
 
-##### 5. Appending two events for another decider `2ac37f68-9d66-11ed-a8fc-0242ac120002`.
+#### 5. Appending two events for another decider `2ac37f68-9d66-11ed-a8fc-0242ac120002`.
 
 The alone existence of the View is changing how `append_event` works. It is now creating a new event, but also updating a lock table.
 
