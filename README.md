@@ -1,11 +1,33 @@
 # fstore-sql (event-store, based on `postgres`)
 
-
 This project offers a seamless platform for efficiently prototyping event-sourcing and event-streaming without the need for additional infrastructural components.
 
 **Check the [schema.sql](schema.sql) and [extensions.sql](extensions.sql)! It is all there!**
 
 No additional tools, frameworks, or programming languages are required at this level.
+
+<!-- TOC -->
+* [Run Postgres](#run-postgres)
+  * [Requirements](#requirements)
+* [Examples of usage](#examples-of-usage)
+  * [Event Sourcing](#event-sourcing)
+    * [1. Registering a simple decider `decider1` with two event types it can publish: 'event1', 'event2'](#1-registering-a-simple-decider-decider1-with-two-event-types-it-can-publish-event1-event2)
+    * [2. Appending two events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`.](#2-appending-two-events-for-the-decider-f156a3c4-9bd8-11ed-a8fc-0242ac120002)
+    * [3. Get/List events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`](#3-getlist-events-for-the-decider-f156a3c4-9bd8-11ed-a8fc-0242ac120002)
+  * [Event Streaming](#event-streaming)
+    * [4. Registering a (materialized) view `view1` with 1 second pooling frequency, starting from 28th Jan.](#4-registering-a-materialized-view-view1-with-1-second-pooling-frequency-starting-from-28th-jan)
+    * [5. Appending two events for another decider `2ac37f68-9d66-11ed-a8fc-0242ac120002`.](#5-appending-two-events-for-another-decider-2ac37f68-9d66-11ed-a8fc-0242ac120002)
+    * [6a. Stream the events to concurrent consumers/views](#6a-stream-the-events-to-concurrent-consumersviews)
+    * [6b. Stream the events to concurrent consumers / edge-functions (views)](#6b-stream-the-events-to-concurrent-consumers--edge-functions-views)
+* [Design](#design)
+* [fmodel](#fmodel)
+    * [fmodel-kotlin | fmodel-ts | fmodel-rust | fmodel-java](#fmodel-kotlin--fmodel-ts--fmodel-rust--fmodel-java)
+    * [FModel Demo Applications](#fmodel-demo-applications)
+* [Try YugabyteDB](#try-yugabytedb)
+* [References and further reading](#references-and-further-reading)
+<!-- TOC -->
+
+This model is enabling and supporting:
 
 - `event-sourcing` data pattern (by using Postgres database) to durably store events
     - Append events to the ordered, append-only log, using `entity id`/`decider id` as a key
@@ -15,7 +37,9 @@ No additional tools, frameworks, or programming languages are required at this l
 - `event-streaming` to concurrently coordinate read over a stream of messages from multiple consumer instances
     - Support real-time concurrent consumers to project events to view/query models
  
-Every decider/entity stream of events is an independent **partition**. The events within a partition are ordered. **There is no ordering guarantee across different partitions**.
+Every decider/entity stream of events is an independent **partition**. The events within a partition are ordered. There is no ordering guarantee across different partitions.
+
+**The API:**
 
 | SQL function / API                |    event-sourcing    |   event-streaming   |                                                                                                           description |
 |:----------------------------------|:--------------------:|:-------------------:|----------------------------------------------------------------------------------------------------------------------:|
