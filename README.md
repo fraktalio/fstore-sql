@@ -55,7 +55,7 @@ docker compose up -d
 
 These examples are using SQL to interact with the database. Hopefully, you will find them useful, and you can use them in your application.
 
-Import the [schema.sql](schema.sql) and functions into your database.
+Import the [schema.sql](schema.sql) into your database.
 
 
 ### Event Sourcing
