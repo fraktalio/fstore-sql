@@ -14,7 +14,25 @@ No additional tools, frameworks, or programming languages are required at this l
 - `event-streaming` to concurrently coordinate read over a streams of messages from multiple consumer instances
     - Support real-time concurrent consumers to project events to view/query models
  
-Every decider/entity stream of events is an independent **partition**. The events within a partition are totally ordered. **There is no ordering guarantee across different partitions**.
+Every decider/entity stream of events is an independent **partition**. The events within a partition are ordered. **There is no ordering guarantee across different partitions**.
+
+## Run Postgres
+
+It is a Supabase Docker image of Postgres, with extensions installed:
+
+ - [`pg_cron`](https://github.com/citusdata/pg_cron) and 
+ - [`pg_net`](https://github.com/supabase/pg_net).
+
+### Requirements
+
+Notice that we only need these two extensions to publish events to edge-functions/HTTP endpoints/serverless applications, as explained in section `6b` below.
+If you do not need to publish events directly to your serverless applications, **vanilla Postgres will work!**
+
+You can run the following command to start Postgres in a Docker container:
+
+```shell
+docker compose up -d
+```
 
 ## Design
 
@@ -23,10 +41,10 @@ The SQL functions and schema we provide will help you to persist, query, and str
 
  - The decision-making process is a **command handler** responsible for handling the command/intent and producing new events/facts.
    - We call this function a **decide**.
-   - You can run it as an edge function on [Deno](https://deno.com/deploy).
+   - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
  - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model.
    - We call this function a **evolve**.
-   - You can run it as an edge function on [Deno](https://deno.com/deploy).
+   - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
    - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view) to handle the `event`.
      handler.
  
@@ -69,18 +87,7 @@ FModel is a set of libraries that aims to bring functional, algebraic, and react
   [Amazon Aurora (Aurora)](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/CHAP_AuroraOverview.html) is a
   fully managed relational database engine that's compatible with MySQL and PostgreSQL.
 
-## Run Postgres
 
-It is a Supabase Docker image of Postgres, with extensions installed:
-
- - [`pg_cron`](https://github.com/citusdata/pg_cron) and 
- - [`pg_net`](https://github.com/supabase/pg_net).
-
-You can run the following command to start Postgres in a Docker container:
-
-```shell
-docker compose up -d
-```
 
 ## Examples of usage
 
@@ -167,7 +174,7 @@ from append_event('event2', '42ee177e-9d66-11ed-a8fc-0242ac120002', 'decider1', 
                   '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'f7c370aa-9d65-11ed-a8fc-0242ac120002');
 ```
 
-#### 6. Stream the events to concurrent consumers / edge-functions (views)
+#### 6a. Stream the events to concurrent consumers/views
 
 `stream_events` function is used to stream events to the view, one by one.
 On every event being read a lock table is updated to acquire a lock on that partition.
@@ -179,7 +186,6 @@ You can:
 
 > Notice that this query can run in a loop within your application. 
 
-> Alternatively, a cron job will run this function and publish event(s) to edge-functions (views) to handle the event(s).
 
 ```sql
 SELECT *
@@ -188,14 +194,22 @@ SELECT *
 from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1);
 ```
 
+#### 6b. Stream the events to concurrent consumers / edge-functions (views)
+
+> Because of this case `pg_cron` and `pg_net` postgress extensions are required.
+
+It is very similar to the `6a` case. The difference is that the cron job will run `SELECT * from stream_events('view1');` for you, and publish event(s) to your edge-functions/http endpoints automatically. So, the database is doing all the job. 
+
+The `cron` job is managed(created/deleted) by triggers on the `view` table. So, whenever you register a new View, the cron job will be created automatically.
+
 ## Try YugabyteDB
 
-Alternatively, you can use YugabyteDB instead of Postgres. We love YugabyteDB, but we are focusing on Postgres for now in order to keep the project simple.
-Still we are providing you with this section, so you can try YugabyteDB as well.
+Alternatively, you can use YugabyteDB instead of Postgres. We love YugabyteDB, but we are focusing on Postgres for now to keep the project simple.
+Still, we are providing you with this section, so you can try YugabyteDB as well.
 
 YugabyteDB is a high-performance, cloud-native distributed SQL database that aims to support all Postgres features. It
-is best fit for cloud-native OLTP (i.e. real-time, business critical) applications that need absolute data correctness
-and require at least one of the following: scalability, high tolerance to failures, globally-distributed deployments.
+is best fit for cloud-native OLTP (i.e. real-time, business-critical) applications that need absolute data correctness
+and require at least one of the following: scalability, high tolerance to failures, globally distributed deployments.
 
 > The YSQL API is fully compatible with Postgres.
 > API compatibility refers to the fact that the database APIs offered by YugabyteDB servers implement the
