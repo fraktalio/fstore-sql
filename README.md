@@ -169,10 +169,10 @@ The `cron` job is managed(created/deleted) by triggers on the `view` table. So, 
 The SQL functions and schema we provide will help you to persist, query, and stream events in a robust way, but the
 **decision-making** and **view-handling** logic would be something that you would have to implement on your own.
 
- - The decision-making process is a **command handler** responsible for handling the command/intent and producing new events/facts.
+ - The decision-making process is a **command handler** responsible for handling the command/intent and producing new events/facts that can be saved in the database by using `append_event` SQL function. Command handler can be implemented in any programming language, Kotlin, TypeScript, Rust, ...
    - We call this function a **decide**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
- - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model.
+ - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model. Event handler uses using `stream_events` SQL function from your application to fetch/pool events, or `stream_events` SQL function is triggered by the cron job on the DB side and event(s) are published/pushed to your HTTP endpoints/edge functions. 
    - We call this function an **evolve**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
    - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view).
