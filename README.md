@@ -16,7 +16,7 @@ No additional tools, frameworks, or programming languages are required at this l
  
 Every decider/entity stream of events is an independent **partition**. The events within a partition are ordered. **There is no ordering guarantee across different partitions**.
 
-| SQL function                      |    event-sourcing    |   event-streaming   |                                                                                                           description |
+| SQL function / API                |    event-sourcing    |   event-streaming   |                                                                                                           description |
 |:----------------------------------|:--------------------:|:-------------------:|----------------------------------------------------------------------------------------------------------------------:|
 | `register_decider_event`          |  :heavy_check_mark:  |         :x:         |                                                                Register a decider and event types that it can publish |
 | `append_event`                    |  :heavy_check_mark:  |         :x:         |                                                                Append/Insert new event to the database `events` table |
