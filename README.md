@@ -173,14 +173,14 @@ The SQL functions and schema we provide will help you to persist, query, and str
    - We call this function a **decide**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
 
-![event-sourcing](event-sourcing.png)
+![event-sourcing](.assets/event-sourcing.png)
 
  - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model. Event handler uses `stream_events` SQL function from your application to fetch/pool events, or `stream_events` SQL function is triggered by the cron job on the DB side and event(s) are published/pushed to your event handlers/HTTP endpoints/edge functions. 
    - We call this function an **evolve**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
    - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view).
 
-![event-streaming](event-streaming.png)
+![event-streaming](.assets/event-streaming.png)
 
 
 ## fmodel
@@ -191,14 +191,14 @@ The SQL functions and schema we provide will help you to persist, query, and str
 
 💙 Accelerate the development of compositional, ergonomic, data-driven, and safe applications 💙
 
-| Command      | Event         | State         |
-| :---         |     :---:     |          ---: |
-| An intent to change the state of the system | The state change itself, a fact. It represents a decision that has already happened | The current state of the system. It has evolved out of past events |
-| ![command](command.svg) | ![event](event.svg) | ![state](state.svg) |
-| -       | -         | -         |
-| Decide       | Evolve         | React         |
+| Command                                                                                                |                                                   Event                                                   |                                                                                                          State |
+|:-------------------------------------------------------------------------------------------------------|:---------------------------------------------------------------------------------------------------------:|---------------------------------------------------------------------------------------------------------------:|
+| An intent to change the state of the system                                                            |            The state change itself, a fact. It represents a decision that has already happened            |                                             The current state of the system. It has evolved out of past events |
+| ![command](.assets/command.svg)                                                                        |                                        ![event](.assets/event.svg)                                        |                                                                                    ![state](.assets/state.svg) |
+| -                                                                                                      |                                                     -                                                     |                                                                                                              - |
+| Decide                                                                                                 |                                                  Evolve                                                   |                                                                                                          React |
 | A pure function that takes command and current state as parameters, and returns the flow of new events | A pure function that takes event and current state as parameters, and returns the new state of the system | A pure function that takes event as parameter, and returns the flow of commands, deciding what to execute next |
-| ![decide](decide.svg) | ![evolve](evolve.svg) | ![react](orchestrate.svg) |
+| ![decide](.assets/decide.svg)                                                                          |                                       ![evolve](.assets/evolve.svg)                                       |                                                                              ![react](.assets/orchestrate.svg) |
 
 #### FModel Demo Applications
 |        |                                                                      Event-Sourced                                                                       | State-Stored   |
