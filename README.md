@@ -2,10 +2,9 @@
 
 This project offers a seamless platform for efficiently prototyping event-sourcing and event-streaming without the need for additional infrastructural components.
 
-**Check the [schema.sql](schema.sql) and [extensions.sql](extensions.sql)! It is all there!**
+**Check the [schema.sql](schema.sql) and [extensions.sql](extensions.sql)! It is all there!** No additional tools, frameworks, or programming languages are required at this level.
 
-No additional tools, frameworks, or programming languages are required at this level.
-
+## Table of contents
 <!-- TOC -->
 * [Run Postgres](#run-postgres)
   * [Requirements](#requirements)
