@@ -23,9 +23,10 @@ create extension if not exists "pg_cron";
 
 -- API: Create a function to stream events to a view/event handler/edge function(s).
 -- The view/event handler is an HTTP endpoint/edge function that receives the events.
--- example: SELECT schedule_events('view', 'view-cron', '5 seconds');
--- unschedule: SELECT cron.unschedule('event-handler-cron');
-CREATE OR REPLACE FUNCTION schedule_events(v_view TEXT, v_job_name TEXT, v_schedule TEXT)
+-- example: SELECT schedule_events('view1', '2 seconds', 'https://localhost:3000/functions/v1/event-handler');
+-- unschedule: SELECT cron.unschedule('view1');
+CREATE OR REPLACE FUNCTION schedule_events(v_view TEXT, v_schedule TEXT DEFAULT '1 seconds',
+                                           v_edge_function_url TEXT DEFAULT 'https://localhost:3000/functions/v1/event-handler')
     RETURNS bigint AS
 $$
 DECLARE
@@ -35,12 +36,12 @@ BEGIN
     sql_statement := '
         WITH event_result AS (
             SELECT *
-            FROM stream_events(''' || v_view || ''')
+            FROM stream_events(''' || v_view || ''', 1)
             LIMIT 1
         )
         SELECT
             net.http_post(
-                url:=''https://mkqwnwwkrupyrqnqsomg.supabase.co/functions/v1/event-handler'',
+                url:=''' || v_edge_function_url || ''',
                 body:=jsonb_build_object(''view'', ''' || v_view || ''', ''decider_id'', event_result.decider_id, ''offset'', event_result.offset, ''data'', event_result.data)
             ) AS request_id
         FROM event_result
@@ -50,7 +51,7 @@ BEGIN
     EXECUTE sql_statement;
 
     -- Schedule the dynamic SQL statement to run at the specified interval
-    RETURN cron.schedule(v_job_name, v_schedule, sql_statement);
+    RETURN cron.schedule(v_view, v_schedule, sql_statement);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -60,10 +61,10 @@ CREATE OR REPLACE FUNCTION on_insert_on_views() RETURNS trigger AS
 '
     BEGIN
         -- Create the cron job. Stream events to the view/event handler every `NEW.pooling_delay` seconds
-        PERFORM schedule_events(NEW.view, NEW.view, NEW.pooling_delay || '' seconds'');
+        PERFORM schedule_events(NEW.view, NEW.pooling_delay_s || '' seconds'', NEW.edge_function_url);
         -- If you do not want to use cron.job_run_details at all, then you can add cron.log_run = off to postgresql.conf.
         -- or, delete old cron.job_run_details records of the current view, every day at noon
-        PERFORM cron.schedule(''delete'' || NEW.view, ''0 12 * * *'',
+        PERFORM cron.schedule(''delete_'' || NEW.view, ''0 12 * * *'',
                               $$DELETE FROM cron.job_run_details USING cron.job WHERE jobid = cron.job.jobid AND cron.job.jobname = NEW.view AND end_time < now() - interval ''1 days''$$);
         RETURN NEW;
     END;

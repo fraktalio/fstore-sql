@@ -149,15 +149,20 @@ EXECUTE FUNCTION check_previous_id_in_same_decider();
 CREATE TABLE IF NOT EXISTS views
 (
     -- view identifier/name
-    "view"          TEXT,
-    -- pooling_delay represent the frequency of pooling the database for the new events / 500 ms by default
-    "pooling_delay" BIGINT                   DEFAULT 500   NOT NULL,
+    "view"              TEXT,
+    -- pooling_delay represent the frequency of pooling the database for the new events, measured in seconds / 1 second, by default
+    "pooling_delay_s"   BIGINT                   DEFAULT 1     NOT NULL,
     -- the point in time form where the event streaming/pooling should start / NOW is by default, but you can specify the binging of time if you want
-    "start_at"      TIMESTAMP                DEFAULT NOW() NOT NULL,
+    "start_at"          TIMESTAMP                DEFAULT NOW() NOT NULL,
+    -- the timeout for the lock / 300 seconds by default
+    -- so you have 300 seconds to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
+    "lock_timeout_s"    BIGINT                   DEFAULT 300   NOT NULL,
+    -- the url of the edge function that will be called for each event
+    "edge_function_url" TEXT                     DEFAULT NULL,
     -- the timestamp of the view insertion.
-    "created_at"    TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    "created_at"        TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     -- the timestamp of the view update.
-    "updated_at"    TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    "updated_at"        TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     PRIMARY KEY ("view")
 );
 
@@ -358,55 +363,27 @@ CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID, v_decider TEXT)
 -- API: Register a `view` (responsible for streaming events to concurrent consumers)
 -- Once the `view` is registered you can start `read_events` which will stream events by pooling database with delay, filtering `events` that are created after `start_at` timestamp
 -- Example of usage: SELECT * from register_view('view1', 1, '2023-01-23 12:17:17.078384')
-CREATE OR REPLACE FUNCTION register_view(v_view TEXT, v_pooling_delay BIGINT, v_start_at TIMESTAMP)
+CREATE OR REPLACE FUNCTION register_view(v_view TEXT,
+                                         v_pooling_delay_s BIGINT DEFAULT 1,
+                                         v_start_at TIMESTAMP DEFAULT NOW(),
+                                         v_lock_timeout_s BIGINT DEFAULT 300,
+                                         v_edge_function_url TEXT DEFAULT NULL
+)
     RETURNS SETOF "views" AS
 '
-    INSERT INTO "views" ("view", pooling_delay, start_at)
-    VALUES (v_view, v_pooling_delay, v_start_at)
+    INSERT INTO "views" ("view", pooling_delay_s, start_at, lock_timeout_s, edge_function_url)
+    VALUES (v_view, v_pooling_delay_s, v_start_at, v_lock_timeout_s, v_edge_function_url)
     RETURNING *;
 ' LANGUAGE sql;
 
--- API: Get event(s) for the view - option 1 - event streaming to concurrent consumers in a safe way
+-- API: Get events for the view - event streaming to concurrent consumers in a safe way.
 -- Concurrent Views/Subscribers can not stream/read events from one decider_id stream (partition) at the same time, because `lock` is preventing it.
 -- They can read events concurrently from different decider_id streams (partitions) by preserving the ordering of events within decider_id stream (partition) only!
--- Example of usage: SELECT * from stream_events('view1')
--- Notice: It will return SINGLE event!
--- Notice: The lock is set for 5 minutes, so you have 5 minutes to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
-CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT)
-    RETURNS SETOF events AS
-'
-    WITH locked_view AS (SELECT decider_id, last_offset
-                         FROM locks
-                         WHERE view = v_view_name
-                           AND locked_until < NOW()
-                           AND last_offset < "offset"
-                         ORDER BY "offset"
-                         LIMIT 1 FOR UPDATE SKIP LOCKED),
-         update_locks AS (UPDATE locks
-                          SET locked_until = NOW() + INTERVAL ''5m''
-                          FROM locked_view
-                          WHERE locks.view = v_view_name
-                              AND locks.decider_id = locked_view.decider_id
-                          RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset)
-    SELECT *
-    FROM events
-    WHERE decider_id = (SELECT decider_id
-                        FROM update_locks)
-      AND "offset" > (SELECT last_offset
-                      FROM update_locks)
-    ORDER BY "offset"
-    LIMIT 1;
-'
-    LANGUAGE sql;
-
--- API: Get events for the view - option 2 - event streaming to concurrent consumers in a safe way
--- Concurrent Views/Subscribers can not stream/read events from one decider_id stream (partition) at the same time, because `lock` is preventing it.
--- They can read events concurrently from different decider_id streams (partitions) by preserving the ordering of events within decider_id stream (partition) only!
--- Example of usage: SELECT * from stream_events('view1', 100)
+-- Example of usage: SELECT * from stream_events('view1', 100, 300)
 -- It will return `v_limit` events at maximum! (if there are less events in the stream, it will return less)
 -- Notice: all returned events belong to different decider_id's (partitions) and you should be able to handle them in parallel and in any order. Also, the `ack_event()` function could be called for each event separately in a safe way!
--- Notice: The lock is set for 5 minutes, so you have 5 minutes to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
-CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT, v_limit INT)
+-- Notice: The lock is set for 5 minutes / 300 seconds by default, so you have 5 minutes to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
+CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT, v_limit INT DEFAULT 1, v_seconds INT DEFAULT 300)
     RETURNS SETOF events AS
 '
     WITH locked_view AS (SELECT decider_id, last_offset
@@ -417,11 +394,11 @@ CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT, v_limit INT)
                          ORDER BY "offset"
                          LIMIT v_limit FOR UPDATE SKIP LOCKED),
          update_locks AS (UPDATE locks
-                          SET locked_until = NOW() + INTERVAL ''5m''
-                          FROM locked_view
-                          WHERE locks.view = v_view_name
-                            AND locks.decider_id = locked_view.decider_id
-                          RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset),
+             SET locked_until = NOW() + (v_seconds || ''s'')::INTERVAL
+             FROM locked_view
+             WHERE locks.view = v_view_name
+                 AND locks.decider_id = locked_view.decider_id
+             RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset),
          next_offset AS (SELECT e.decider_id,
                                 MIN(e."offset") AS "offset"
                          FROM events e

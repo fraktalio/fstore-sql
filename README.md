@@ -165,7 +165,7 @@ Every unique stream of events for the one deciderId/entityId is a partition.
 
 ```sql
 SELECT *
-from register_view('view1', 1, '2023-01-28 12:17:17.078384');
+from register_view('view1', 1, '2023-01-28 12:17:17.078384', 300, 'https://localhost:3000/functions/v1/event-handler');
 ```
 
 ##### 5. Appending two events for another decider `2ac37f68-9d66-11ed-a8fc-0242ac120002`.
