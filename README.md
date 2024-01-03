@@ -172,7 +172,7 @@ The SQL functions and schema we provide will help you to persist, query, and str
  - The decision-making process is a **command handler** responsible for handling the command/intent and producing new events/facts that can be saved in the database by using `append_event` SQL function. Command handler can be implemented in any programming language, Kotlin, TypeScript, Rust, ...
    - We call this function a **decide**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
- - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model. Event handler uses using `stream_events` SQL function from your application to fetch/pool events, or `stream_events` SQL function is triggered by the cron job on the DB side and event(s) are published/pushed to your HTTP endpoints/edge functions. 
+ - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model. Event handler uses `stream_events` SQL function from your application to fetch/pool events, or `stream_events` SQL function is triggered by the cron job on the DB side and event(s) are published/pushed to your event handlers/HTTP endpoints/edge functions. 
    - We call this function an **evolve**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
    - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view).
@@ -184,7 +184,7 @@ Consider [Supabase](https://supabase.io/) as a Postgres database on steroids, wi
 
 #### [fmodel-kotlin](https://github.com/fraktalio/fmodel) | [fmodel-ts](https://github.com/fraktalio/fmodel-ts) | [fmodel-rust](https://github.com/fraktalio/fmodel-rust) | [fmodel-java](https://github.com/fraktalio/fmodel-java)
 
-FModel is a set of libraries that aims to bring functional, algebraic, and reactive domain modeling to Kotlin / TypeScript / Rust / Java. It is inspired by DDD, EventSourcing, and Functional programming communities.
+'fmodel' is a set of libraries that aims to bring functional, algebraic, and reactive domain modeling to Kotlin / TypeScript / Rust / Java. It is inspired by DDD, EventSourcing, and Functional programming communities.
 
 💙 Accelerate the development of compositional, ergonomic, data-driven, and safe applications 💙
 
