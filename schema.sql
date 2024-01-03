@@ -6,7 +6,7 @@
 
 -- In this event store, an event cannot exist without an decider/entity
 -- The deciders table controls the decider and event names/types that can be used in the events table itself through the use of composite foreign keys.
--- It must be populated before events can be appended to the main table called events.
+-- It must be populated before events can be appended to the main table called `events`.
 CREATE TABLE IF NOT EXISTS deciders
 (
     -- decider name/type
@@ -305,7 +305,7 @@ EXECUTE FUNCTION on_insert_or_update_on_views();
 -- #######################################################################################
 
 
--- Register the type of event that this `decider` is able to publish/store
+-- API: Register the type of event that this `decider` is able to publish/store
 -- Event can not be inserted into `event` table without the matching event being registered previously. It is controlled by the 'Foreign Key' constraint on the `event` table
 -- Example of usage: SELECT * from register_decider_event('decider1', 'event1')
 CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT)
@@ -316,7 +316,7 @@ CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT)
     RETURNING *;
 ' LANGUAGE sql;
 
--- Append/Insert new 'event'
+-- API: Append/Insert new 'event'
 -- Example of usage: SELECT * from append_event('event1', '21e19516-9bda-11ed-a8fc-0242ac120002', 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null)
 CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider TEXT, v_decider_id UUID, v_data JSONB,
                                         v_command_id UUID, v_previous_id UUID)
@@ -327,7 +327,7 @@ CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider
     RETURNING *;
 ' LANGUAGE sql;
 
--- Get events by decider_id and decider type
+-- API: Get events by decider_id and decider type
 -- Used by the Decider/Entity to get list of events from where it can source its own state
 -- Example of usage: SELECT * FROM get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'decider1')
 CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID, v_decider TEXT)
@@ -340,7 +340,7 @@ CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID, v_decider TEXT)
     ORDER BY "offset";
 ' LANGUAGE sql;
 
--- Get the lass event by decider_id and decider type
+-- API: Get the lass event by decider_id and decider type
 CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID, v_decider TEXT)
     RETURNS SETOF events AS
 '
@@ -355,7 +355,7 @@ CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID, v_decider TEXT)
 -- ######                                EVENT STREAMING                            ######
 -- #######################################################################################
 
--- Register a `view` (responsible for streaming events to concurrent consumers)
+-- API: Register a `view` (responsible for streaming events to concurrent consumers)
 -- Once the `view` is registered you can start `read_events` which will stream events by pooling database with delay, filtering `events` that are created after `start_at` timestamp
 -- Example of usage: SELECT * from register_view('view1', 1, '2023-01-23 12:17:17.078384')
 CREATE OR REPLACE FUNCTION register_view(v_view TEXT, v_pooling_delay BIGINT, v_start_at TIMESTAMP)
@@ -366,10 +366,12 @@ CREATE OR REPLACE FUNCTION register_view(v_view TEXT, v_pooling_delay BIGINT, v_
     RETURNING *;
 ' LANGUAGE sql;
 
--- Get event(s) for the view - event streaming to concurrent consumers in a safe way
+-- API: Get event(s) for the view - option 1 - event streaming to concurrent consumers in a safe way
 -- Concurrent Views/Subscribers can not stream/read events from one decider_id stream (partition) at the same time, because `lock` is preventing it.
 -- They can read events concurrently from different decider_id streams (partitions) by preserving the ordering of events within decider_id stream (partition) only!
 -- Example of usage: SELECT * from stream_events('view1')
+-- Notice: It will return SINGLE event!
+-- Notice: The lock is set for 5 minutes, so you have 5 minutes to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
 CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT)
     RETURNS SETOF events AS
 '
@@ -380,13 +382,12 @@ CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT)
                            AND last_offset < "offset"
                          ORDER BY "offset"
                          LIMIT 1 FOR UPDATE SKIP LOCKED),
-         update_locks AS (
-             UPDATE locks
-                 SET locked_until = NOW() + INTERVAL ''5m''
-                 FROM locked_view
-                 WHERE locks.view = v_view_name
-                     AND locks.decider_id = locked_view.decider_id
-                 RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset)
+         update_locks AS (UPDATE locks
+                          SET locked_until = NOW() + INTERVAL ''5m''
+                          FROM locked_view
+                          WHERE locks.view = v_view_name
+                              AND locks.decider_id = locked_view.decider_id
+                          RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset)
     SELECT *
     FROM events
     WHERE decider_id = (SELECT decider_id
@@ -398,7 +399,45 @@ CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT)
 '
     LANGUAGE sql;
 
--- Acknowledge that event with `decider_id` and `offset` is processed by the view
+-- API: Get events for the view - option 2 - event streaming to concurrent consumers in a safe way
+-- Concurrent Views/Subscribers can not stream/read events from one decider_id stream (partition) at the same time, because `lock` is preventing it.
+-- They can read events concurrently from different decider_id streams (partitions) by preserving the ordering of events within decider_id stream (partition) only!
+-- Example of usage: SELECT * from stream_events('view1', 100)
+-- It will return `v_limit` events at maximum! (if there are less events in the stream, it will return less)
+-- Notice: all returned events belong to different decider_id's (partitions) and you should be able to handle them in parallel and in any order. Also, the `ack_event()` function could be called for each event separately in a safe way!
+-- Notice: The lock is set for 5 minutes, so you have 5 minutes to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
+CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT, v_limit INT)
+    RETURNS SETOF events AS
+'
+    WITH locked_view AS (SELECT decider_id, last_offset
+                         FROM locks
+                         WHERE view = v_view_name
+                           AND locked_until < NOW()
+                           AND last_offset < "offset"
+                         ORDER BY "offset"
+                         LIMIT v_limit FOR UPDATE SKIP LOCKED),
+         update_locks AS (UPDATE locks
+                          SET locked_until = NOW() + INTERVAL ''5m''
+                          FROM locked_view
+                          WHERE locks.view = v_view_name
+                            AND locks.decider_id = locked_view.decider_id
+                          RETURNING locked_view.decider_id AS decider_id, locked_view.last_offset AS last_offset),
+         next_offset AS (SELECT e.decider_id,
+                                MIN(e."offset") AS "offset"
+                         FROM events e
+                                  JOIN update_locks ul ON e.decider_id = ul.decider_id
+                         WHERE e."offset" > ul.last_offset
+                         GROUP BY e.decider_id)
+    SELECT *
+    FROM events
+    WHERE "offset" IN (SELECT "offset"
+                       FROM next_offset)
+    ORDER BY "offset";
+'
+    LANGUAGE sql;
+
+
+-- API: Acknowledge that event with `decider_id` and `offset` is processed successfully by the view
 -- Essentially, it will unlock current decider_id stream (partition) for further reading
 -- Example of usage: SELECT * from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1)
 CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id uuid, v_offset BIGINT)
@@ -413,6 +452,7 @@ CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id uuid, v_offset BI
     RETURNING *;
 ' LANGUAGE sql;
 
+-- API: NacK with `decider_id` - it will unlock current decider_id stream (partition) for reading the event again
 CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id UUID)
     RETURNS SETOF "locks" AS
 '
@@ -423,6 +463,7 @@ CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id UUID)
     RETURNING *;
 ' LANGUAGE sql;
 
+-- API: Schedule NacK with `decider_id` - it will unlock current decider_id stream (partition) for reading the event again after `v_milliseconds` delay
 CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id UUID, v_milliseconds BIGINT)
     RETURNS SETOF "locks" AS
 '
@@ -432,87 +473,3 @@ CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id UUID, v
       AND decider_id = v_decider_id
     RETURNING *;
 ' LANGUAGE sql;
-
--- #######################################################################################
--- ######                                pg_NET extension                          ######
--- #######################################################################################
-create extension if not exists "pg_net" with schema "public";
-
-
--- #######################################################################################
--- ######                                pg_CRON extension                          ######
--- #######################################################################################
-
--- enable 'pg_cron' extension
-create extension if not exists "pg_cron" with schema "public";
-
--- Create a function to stream events to a view/event handler/edge function(s).
--- The view/event handler is an HTTP endpoint/edge function that receives the events.
--- example: SELECT schedule_events('view', 'view-cron', '5 seconds');
--- unschedule: SELECT cron.unschedule('event-handler-cron');
-CREATE OR REPLACE FUNCTION schedule_events(v_view TEXT, v_job_name TEXT, v_schedule TEXT)
-    RETURNS bigint AS
-$$
-DECLARE
-    sql_statement TEXT;
-BEGIN
-    -- Construct the dynamic SQL statement
-    sql_statement := '
-        WITH event_result AS (
-            SELECT *
-            FROM stream_events(''' || v_view || ''')
-            LIMIT 1
-        )
-        SELECT
-            net.http_post(
-                url:=''https://mkqwnwwkrupyrqnqsomg.supabase.co/functions/v1/event-handler'',
-                body:=jsonb_build_object(''view'', ''' || v_view || ''', ''decider_id'', event_result.decider_id, ''offset'', event_result.offset, ''data'', event_result.data)
-            ) AS request_id
-        FROM event_result
-    ';
-
-    -- Execute the dynamic SQL statement
-    EXECUTE sql_statement;
-
-    -- Schedule the dynamic SQL statement to run at the specified interval
-    RETURN cron.schedule(v_job_name, v_schedule, sql_statement);
-END;
-$$ LANGUAGE plpgsql;
-
-
--- Create a trigger function to stream events to a view/event handler.
-CREATE OR REPLACE FUNCTION on_insert_on_views() RETURNS trigger AS
-'
-    BEGIN
-        -- Create the cron job. Stream events to the view/event handler every `NEW.pooling_delay` seconds
-        PERFORM schedule_events(NEW.view, NEW.view, NEW.pooling_delay || '' seconds'');
-        -- If you do not want to use cron.job_run_details at all, then you can add cron.log_run = off to postgresql.conf.
-        -- Delete old cron.job_run_details records of the current view, every day at noon
-        PERFORM cron.schedule(''delete'' || NEW.view, ''0 12 * * *'',
-                              $$DELETE FROM cron.job_run_details USING cron.job WHERE jobid = cron.job.jobid AND cron.job.jobname = NEW.view AND end_time < now() - interval ''1 days''$$);
-        RETURN NEW;
-    END;
-' LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS t_on_insert_on_views ON "views";
-CREATE TRIGGER t_on_insert_on_views
-    AFTER INSERT
-    ON "views"
-    FOR EACH ROW
-EXECUTE FUNCTION on_insert_on_views();
-
--- Create a trigger function to stop the cron job, and stop streaming events to a view/event handler.
-CREATE OR REPLACE FUNCTION on_delete_on_views() RETURNS trigger AS
-'
-    BEGIN
-        PERFORM cron.unschedule(OLD.view);
-        RETURN NEW;
-    END;
-' LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS t_on_delete_on_views ON "views";
-CREATE TRIGGER t_on_delete_on_views
-    AFTER DELETE
-    ON "views"
-    FOR EACH ROW
-EXECUTE FUNCTION on_delete_on_views();

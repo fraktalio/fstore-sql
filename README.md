@@ -2,7 +2,7 @@
 
 This project offers a seamless platform for efficiently prototyping event-sourcing and event-streaming without the need for additional infrastructural components.
 
-**Check the [schema.sql](schema.sql)! It is all there!**
+**Check the [schema.sql](schema.sql) and [extensions.sql](extensions.sql)! It is all there!**
 
 No additional tools, frameworks, or programming languages are required at this level.
 
@@ -16,6 +16,21 @@ No additional tools, frameworks, or programming languages are required at this l
  
 Every decider/entity stream of events is an independent **partition**. The events within a partition are ordered. **There is no ordering guarantee across different partitions**.
 
+| SQL function                      |    event-sourcing    |   event-streaming   |                                                                                                           description |
+|:----------------------------------|:--------------------:|:-------------------:|----------------------------------------------------------------------------------------------------------------------:|
+| `register_decider_event`          |  :heavy_check_mark:  |         :x:         |                                                                Register a decider and event types that it can publish |
+| `append_event`                    |  :heavy_check_mark:  |         :x:         |                                                                Append/Insert new event to the database `events` table |
+| `get_events`                      |  :heavy_check_mark:  |         :x:         |                                                                                       Get/List events for the decider |
+| `get_last_events`                 |  :heavy_check_mark:  |         :x:         |                                                                                        Get last event for the decider |
+| `register_view`                   |         :x:          | :heavy_check_mark:  |                                                                                   Register a view to stream events to |
+| `stream_events`                   |         :x:          | :heavy_check_mark:  |                                                                        Stream events to the view/concurrent consumers |
+| `ack_event`                       |         :x:          | :heavy_check_mark:  |                           Acknowledge that event with `decider_id` and `offset` is successfully processed by the view |
+| `nack_event`                      |         :x:          | :heavy_check_mark:  |             Acknowledge that event with `decider_id` is NOT processed by the view, and the view will process it again |
+| `schedule_nack_event`             |         :x:          | :heavy_check_mark:  | Acknowledge that event with `decider_id` is NOT processed by the view, and the view will process it again after delay |
+| `scedule_events` (cron extension) |         :x:          | :heavy_check_mark:  |                                                                                       Schedule events to be published |
+
+
+
 ## Run Postgres
 
 It is a Supabase Docker image of Postgres, with extensions installed:
@@ -26,7 +41,7 @@ It is a Supabase Docker image of Postgres, with extensions installed:
 ### Requirements
 
 Notice that we only need these two extensions to publish events to edge-functions/HTTP endpoints/serverless applications, as explained in section `6b` below.
-If you do not need to publish events directly to your serverless applications, **vanilla Postgres will work!**
+If you do not need to publish events directly to your serverless applications, **vanilla Postgres will work just fine!**
 
 You can run the following command to start Postgres in a Docker container:
 
@@ -43,10 +58,10 @@ The SQL functions and schema we provide will help you to persist, query, and str
    - We call this function a **decide**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
  - The view-handling process is an **event handler** that is responsible for handling the event/fact and producing a new view/query model.
-   - We call this function a **evolve**.
+   - We call this function an **evolve**.
    - You can run it as an edge function on [Supabase](https://supabase.com/docs/guides/functions) or [Deno](https://deno.com/deploy).
-   - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view) to handle the `event`.
-     handler.
+   - `pg_crone` and `pg_net` extensions are used to schedule the event publishing process and send the HTTP request/`event` to the edge function (view), to handle the `event`.
+   
  
 Consider [Supabase](https://supabase.io/) as a Postgres database on steroids, with built-in Authentication, instant APIs, Edge Functions, real-time subscriptions, Storage, and Vector embeddings...
 
@@ -176,7 +191,7 @@ from append_event('event2', '42ee177e-9d66-11ed-a8fc-0242ac120002', 'decider1', 
 
 #### 6a. Stream the events to concurrent consumers/views
 
-`stream_events` function is used to stream events to the view, one by one.
+`stream_events` function is used to stream events to the view.
 On every event being read a lock table is updated to acquire a lock on that partition.
 You can:
 
@@ -196,26 +211,19 @@ from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1);
 
 #### 6b. Stream the events to concurrent consumers / edge-functions (views)
 
-> Because of this case `pg_cron` and `pg_net` postgress extensions are required.
+Import the [extensions.sql](extensions.sql) into your database.
 
 It is very similar to the `6a` case. The difference is that the cron job will run `SELECT * from stream_events('view1');` for you, and publish event(s) to your edge-functions/http endpoints automatically. So, the database is doing all the job. 
 
-The `cron` job is managed(created/deleted) by triggers on the `view` table. So, whenever you register a new View, the cron job will be created automatically.
+The `cron` job is managed(created/deleted) by triggers on the `view` table (uncomment the triggers in [schema.sql](schema.sql) to enable it!). So, whenever you register a new View, the cron job will be created automatically.
 
 ## Try YugabyteDB
 
-Alternatively, you can use YugabyteDB instead of Postgres. We love YugabyteDB, but we are focusing on Postgres for now to keep the project simple.
-Still, we are providing you with this section, so you can try YugabyteDB as well.
+Alternatively, you can use YugabyteDB instead of Postgres. It is fully compatible with Postgres.
 
 YugabyteDB is a high-performance, cloud-native distributed SQL database that aims to support all Postgres features. It
 is best fit for cloud-native OLTP (i.e. real-time, business-critical) applications that need absolute data correctness
 and require at least one of the following: scalability, high tolerance to failures, globally distributed deployments.
-
-> The YSQL API is fully compatible with Postgres.
-> API compatibility refers to the fact that the database APIs offered by YugabyteDB servers implement the
-> same `wire protocol` and `modeling/query language` as that of an existing database. Since client drivers, command line
-> shells, IDE integrations and other ecosystem integrations of the existing database rely on this wire protocol and
-> modeling/query language, they are expected to work with YugabyteDB without major modifications.
 
 
 You can [download](https://docs.yugabyte.com/preview/quick-start/install) as ready-to-use packages or installers for
