@@ -21,7 +21,7 @@ Every decider/entity stream of events is an independent **partition**. The event
 | `register_decider_event`          |  :heavy_check_mark:  |         :x:         |                                                                Register a decider and event types that it can publish |
 | `append_event`                    |  :heavy_check_mark:  |         :x:         |                                                                Append/Insert new event to the database `events` table |
 | `get_events`                      |  :heavy_check_mark:  |         :x:         |                                                                                       Get/List events for the decider |
-| `get_last_events`                 |  :heavy_check_mark:  |         :x:         |                                                                                        Get last event for the decider |
+| `get_last_event`                 |  :heavy_check_mark:  |         :x:         |                                                                                        Get last event for the decider |
 | `register_view`                   |         :x:          | :heavy_check_mark:  |                                                                                   Register a view to stream events to |
 | `stream_events`                   |         :x:          | :heavy_check_mark:  |                                                                        Stream events to the view/concurrent consumers |
 | `ack_event`                       |         :x:          | :heavy_check_mark:  |                           Acknowledge that event with `decider_id` and `offset` is successfully processed by the view |
