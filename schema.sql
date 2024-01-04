@@ -197,7 +197,8 @@ CREATE TABLE IF NOT EXISTS locks
     FOREIGN KEY ("view") REFERENCES views ("view") ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS locks_index ON locks ("decider_id", "locked_until", "last_offset");
+CREATE INDEX IF NOT EXISTS event_streaming_index ON events ("decider_id", "offset");
+CREATE INDEX IF NOT EXISTS locks_index ON locks ("view", "locked_until", "last_offset");
 
 -- SIDE EFFECT:  before_update_views_table - automatically bump "updated_at" when modifying a view
 CREATE OR REPLACE FUNCTION "before_update_views_table"() RETURNS trigger AS
@@ -319,7 +320,8 @@ EXECUTE FUNCTION on_insert_or_update_on_views();
 -- API: Register the type of event that this `decider` is able to publish/store
 -- Event can not be inserted into `event` table without the matching event being registered previously. It is controlled by the 'Foreign Key' constraint on the `event` table
 -- Example of usage: SELECT * from register_decider_event('decider1', 'event1', 'description of the event1 on version 2', 2)
-CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT, v_description TEXT, v_event_version BIGINT DEFAULT 1)
+CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT, v_description TEXT,
+                                                  v_event_version BIGINT DEFAULT 1)
     RETURNS SETOF deciders AS
 '
     INSERT INTO deciders (decider, event, event_version, description)
