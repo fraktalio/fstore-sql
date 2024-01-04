@@ -90,9 +90,9 @@ It must be populated before events can be appended to the main table called `eve
 
 ```sql
 SELECT *
-from register_decider_event('decider1', 'event1');
+from register_decider_event('decider1', 'event1', 'description1', 1);
 SELECT *
-from register_decider_event('decider1', 'event2');
+from register_decider_event('decider1', 'event2', 'description2', 1);
 ```
 
 #### 2. Appending two events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`.
@@ -105,10 +105,10 @@ This includes duplicated events, incorrect naming (event and decider names canno
 ```sql
 SELECT *
 from append_event('event1', '21e19516-9bda-11ed-a8fc-0242ac120002', 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002',
-                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null);
+                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null, 1);
 SELECT *
 from append_event('event2', 'eb411c34-9d64-11ed-a8fc-0242ac120002', 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002',
-                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '21e19516-9bda-11ed-a8fc-0242ac120002');
+                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '21e19516-9bda-11ed-a8fc-0242ac120002', 1);
 ```
 
 #### 3. Get/List events for the decider `f156a3c4-9bd8-11ed-a8fc-0242ac120002`
@@ -152,10 +152,10 @@ The alone existence of the View is changing how `append_event` works. It is now 
 ```sql
 SELECT *
 from append_event('event1', 'f7c370aa-9d65-11ed-a8fc-0242ac120002', 'decider1', '2ac37f68-9d66-11ed-a8fc-0242ac120002',
-                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null);
+                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null, 1);
 SELECT *
 from append_event('event2', '42ee177e-9d66-11ed-a8fc-0242ac120002', 'decider1', '2ac37f68-9d66-11ed-a8fc-0242ac120002',
-                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'f7c370aa-9d65-11ed-a8fc-0242ac120002');
+                  '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'f7c370aa-9d65-11ed-a8fc-0242ac120002', 1);
 ```
 
 #### 6a. Stream the events to concurrent consumers/views
@@ -172,10 +172,12 @@ You can:
 
 
 ```sql
-SELECT *
-from stream_events('view1');
-SELECT *
-from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1);
+SELECT * from stream_events('view1', 100);
+
+SELECT * from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1);
+
+-- ACK other 99 events, and call `stream_events` again to get the next 100 events.
+-- If you do not ACK the events in 300 seconds as configured on the `view` table, they will be processed again on the next call to `stream_events`.
 ```
 
 #### 6b. Stream the events to concurrent consumers / edge-functions (views)

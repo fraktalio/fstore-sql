@@ -10,10 +10,14 @@
 CREATE TABLE IF NOT EXISTS deciders
 (
     -- decider name/type
-    "decider" TEXT NOT NULL,
+    "decider"       TEXT   NOT NULL,
     -- event name/type that this decider can publish
-    "event"   TEXT NOT NULL,
-    PRIMARY KEY ("decider", "event")
+    "event"         TEXT   NOT NULL,
+    -- version of the event schema
+    "event_version" BIGINT NOT NULL DEFAULT 1,
+    -- description of the event schema
+    "description"   TEXT   NOT NULL,
+    PRIMARY KEY ("decider", "event", "event_version")
 );
 
 -- The events table is designed to allow multiple concurrent, uncoordinated writers to safely create events.
@@ -23,26 +27,28 @@ CREATE TABLE IF NOT EXISTS deciders
 CREATE TABLE IF NOT EXISTS events
 (
     -- event name/type. Part of a composite foreign key to `deciders`
-    "event"       TEXT    NOT NULL,
+    "event"         TEXT    NOT NULL,
     -- event ID. This value is used by the next event as it's `previous_id` value to implement optimistic locking effectively.
-    "event_id"    UUID    NOT NULL UNIQUE,
+    "event_id"      UUID    NOT NULL UNIQUE,
+    -- event version. This value represents the version of the event schema.
+    "event_version" BIGINT  NOT NULL         DEFAULT 1,
     -- decider name/type. Part of a composite foreign key to `deciders`
-    "decider"     TEXT    NOT NULL,
+    "decider"       TEXT    NOT NULL,
     -- identifier for the decider
-    "decider_id"  UUID    NOT NULL,
+    "decider_id"    UUID    NOT NULL,
     -- event data in JSON format
-    "data"        JSONB   NOT NULL,
+    "data"          JSONB   NOT NULL,
     -- command ID causing this event
-    "command_id"  UUID    NOT NULL,
+    "command_id"    UUID    NOT NULL,
     -- previous event uuid; null for first event; null does not trigger UNIQUE constraint; we defined a function `check_first_event_for_decider`
-    "previous_id" UUID UNIQUE,
+    "previous_id"   UUID UNIQUE,
     -- indicator if the event stream for the `decider_id` is final
-    "final"       BOOLEAN NOT NULL         DEFAULT FALSE,
+    "final"         BOOLEAN NOT NULL         DEFAULT FALSE,
     -- The timestamp of the event insertion.
-    "created_at"  TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+    "created_at"    TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     -- ordering sequence/offset for all events, in all deciders.
-    "offset"      BIGSERIAL PRIMARY KEY,
-    FOREIGN KEY ("decider", "event") REFERENCES deciders ("decider", "event")
+    "offset"        BIGSERIAL PRIMARY KEY,
+    FOREIGN KEY ("decider", "event", "event_version") REFERENCES deciders ("decider", "event", "event_version")
 );
 
 CREATE INDEX IF NOT EXISTS decider_index ON events ("decider_id", "decider");
@@ -312,23 +318,23 @@ EXECUTE FUNCTION on_insert_or_update_on_views();
 
 -- API: Register the type of event that this `decider` is able to publish/store
 -- Event can not be inserted into `event` table without the matching event being registered previously. It is controlled by the 'Foreign Key' constraint on the `event` table
--- Example of usage: SELECT * from register_decider_event('decider1', 'event1')
-CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT)
+-- Example of usage: SELECT * from register_decider_event('decider1', 'event1', 'description of the event1 on version 2', 2)
+CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT, v_description TEXT, v_event_version BIGINT DEFAULT 1)
     RETURNS SETOF deciders AS
 '
-    INSERT INTO deciders (decider, event)
-    VALUES (v_decider, v_event)
+    INSERT INTO deciders (decider, event, event_version, description)
+    VALUES (v_decider, v_event, v_event_version, v_description)
     RETURNING *;
 ' LANGUAGE sql;
 
 -- API: Append/Insert new 'event'
--- Example of usage: SELECT * from append_event('event1', '21e19516-9bda-11ed-a8fc-0242ac120002', 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null)
+-- Example of usage: SELECT * from append_event('event1', '21e19516-9bda-11ed-a8fc-0242ac120002',1, 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null)
 CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider TEXT, v_decider_id UUID, v_data JSONB,
-                                        v_command_id UUID, v_previous_id UUID)
+                                        v_command_id UUID, v_previous_id UUID, v_event_version BIGINT DEFAULT 1)
     RETURNS SETOF events AS
 '
-    INSERT INTO events (event, event_id, decider, decider_id, data, command_id, previous_id)
-    VALUES (v_event, v_event_id, v_decider, v_decider_id, v_data, v_command_id, v_previous_id)
+    INSERT INTO events (event, event_id, event_version, decider, decider_id, data, command_id, previous_id)
+    VALUES (v_event, v_event_id, v_event_version, v_decider, v_decider_id, v_data, v_command_id, v_previous_id)
     RETURNING *;
 ' LANGUAGE sql;
 
