@@ -1,6 +1,6 @@
 # fstore-sql (event-store, based on `postgres`)
 
-This project offers a seamless platform for efficiently prototyping event-sourcing and event-streaming without the need for additional infrastructural components.
+This project offers a seamless SQL model for efficiently prototyping event-sourcing and event-streaming by using Postgres database.
 
 **Check the [schema.sql](schema.sql) and [extensions.sql](extensions.sql)! It is all there!** No additional tools, frameworks, or programming languages are required at this level.
 
@@ -36,7 +36,9 @@ This model is enabling and supporting:
 - `event-streaming` to concurrently coordinate read over a stream of messages from multiple consumer instances
     - Support real-time concurrent consumers to project events to view/query models
  
-Every decider/entity stream of events is an independent **partition**. The events within a partition are ordered. There is no ordering guarantee across different partitions.
+Every decider/entity stream of events represents an independent `kafka-like` **partition**. The events within a **partition** are ordered. There is no ordering guarantee across different partitions.
+
+![CQRS](.assets/cqrs.png)
 
 **The API:**
 
