@@ -29,18 +29,21 @@ This project offers a seamless SQL model for efficiently prototyping event-sourc
 This model is enabling and supporting:
 
 - `event-sourcing` data pattern (by using Postgres database) to durably store events
-    - Append events to the ordered, append-only log, using `entity id`/`decider id` as a key
-    - Load all the events for a single entity/decider, in an ordered sequence, using the `entity id`/`decider id` as a
+    - Append events to the ordered, append-only log, using `entity id`/`decider id` and `decider` type as a key
+    - Load all the events for a single entity/decider, in an ordered sequence, using the `entity id`/`decider id` and `decider` type as a
       key
     - Support optimistic locking/concurrency
-- `event-streaming` to concurrently coordinate read over a stream of messages from multiple consumer instances
+- `event-streaming` to concurrently coordinate read over a stream of messages from multiple consumer instances/views
     - Support real-time concurrent consumers to project events to view/query models
+    - Acknowledge that event with `decider_id` and `offset` is successfully processed by the view / ACK
+    - Acknowledge that event with `decider_id` is NOT processed by the view, and the view will process it again automatically / NACK
+    - (Optionally) Acknowledge that event with `decider_id` is NOT processed by the view, and the view will process it again after delay / SCHEDULE NACK
  
 Every decider/entity stream of events represents an independent `kafka-like` **partition**. The events within a **partition** are ordered. There is no ordering guarantee across different partitions.
 
 ![CQRS](.assets/cqrs.png)
 
-**The API:**
+**The API** is a set of SQL functions that you can use to interact with the database. You can use them in your application. The API is what you would expect from a typical event-sourcing and event-streaming database.
 
 | SQL function / API                |    event-sourcing    |   event-streaming   |                                                                                                           description |
 |:----------------------------------|:--------------------:|:-------------------:|----------------------------------------------------------------------------------------------------------------------:|
@@ -128,6 +131,8 @@ The `View` must be registered before events can be streamed to it.
 This streaming is kafka-like, in that it is modeling the concept of partitions and offsets.
 Every unique stream of events for the one deciderId/entityId is a partition. 
 `Lock` table is used to prevent concurrent access/reading to the same partition, guaranteeing that only one consumer can read from a partition at a time / guaranteeing the ordering within the partition on the reading side.
+
+You can configure the `view` to publish event(s) every 1 second, starting from 28th Jan, 2023 with lock/ACK timeout of 300 seconds (if you dont acknowledge that you processed the event in 300 sec, the lock will be released and event will be published again, automatically).
 
 
 > Notice how `lock` for the two events with `decider_id`=`f156a3c4-9bd8-11ed-a8fc-0242ac120002` is created in the
