@@ -4,10 +4,11 @@
 -- Your application does not have ot call `stream_events('view1')` function any more, `cron.job` will run `SELECT * from stream_events('view1');` for you, and publish event(s) to your edge-functions/http endpoints automatically. So, the database is doing all the job.
 -- The `cron` job is managed(created/deleted) by triggers on the `view` table. So, whenever you register a new View, the cron job will be created automatically.
 
+
 -- #######################################################################################
 -- ######                                pg_NET extension                          ######
 -- #######################################################################################
-create extension if not exists "pg_net";
+create extension if not exists "pg_net" schema extensions;
 
 
 -- #######################################################################################
@@ -60,12 +61,14 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION on_insert_on_views() RETURNS trigger AS
 '
     BEGIN
-        -- Create the cron job. Stream events to the view/event handler every `NEW.pooling_delay` seconds
-        PERFORM schedule_events(NEW.view, NEW.pooling_delay_s || '' seconds'', NEW.edge_function_url);
-        -- If you do not want to use cron.job_run_details at all, then you can add cron.log_run = off to postgresql.conf.
-        -- or, delete old cron.job_run_details records of the current view, every day at noon
-        PERFORM cron.schedule(''delete_'' || NEW.view, ''0 12 * * *'',
-                              $$DELETE FROM cron.job_run_details USING cron.job WHERE jobid = cron.job.jobid AND cron.job.jobname = NEW.view AND end_time < now() - interval ''1 days''$$);
+        IF NEW.pooling_delay_s IS NOT NULL THEN
+            -- Create the cron job. Stream events to the view/event handler every `NEW.pooling_delay` seconds
+            PERFORM schedule_events(NEW.view, NEW.pooling_delay_s || '' seconds'', NEW.edge_function_url);
+            -- If you do not want to use cron.job_run_details at all, then you can add cron.log_run = off to postgresql.conf.
+            -- or, delete old cron.job_run_details records of the current view, every day at noon
+            PERFORM cron.schedule(''delete_'' || NEW.view, ''0 12 * * *'',
+                                  $$DELETE FROM cron.job_run_details USING cron.job WHERE jobid = cron.job.jobid AND cron.job.jobname = NEW.view AND end_time < now() - interval ''1 days''$$);
+        END IF;
         RETURN NEW;
     END;
 ' LANGUAGE plpgsql;
@@ -76,6 +79,35 @@ CREATE TRIGGER t_on_insert_on_views
     ON "views"
     FOR EACH ROW
 EXECUTE FUNCTION on_insert_on_views();
+
+
+-- Trigger: Create a trigger function that will activate streaming events to a view/event handler automatically on View update.
+CREATE OR REPLACE FUNCTION on_update_on_views() RETURNS trigger AS
+'
+    BEGIN
+        IF NEW.pooling_delay_s IS NOT NULL THEN
+            -- Create the cron job. Stream events to the view/event handler every `NEW.pooling_delay` seconds
+            PERFORM schedule_events(NEW.view, NEW.pooling_delay_s || '' seconds'', NEW.edge_function_url);
+            -- If you do not want to use cron.job_run_details at all, then you can add cron.log_run = off to postgresql.conf.
+            -- or, delete old cron.job_run_details records of the current view, every day at noon
+            PERFORM cron.schedule(''delete_'' || NEW.view, ''0 12 * * *'',
+                                  $$DELETE FROM cron.job_run_details USING cron.job WHERE jobid = cron.job.jobid AND cron.job.jobname = NEW.view AND end_time < now() - interval ''1 days''$$);
+        ELSE
+            IF OLD.pooling_delay_s IS NOT NULL THEN
+                -- Delete the cron job
+                PERFORM cron.unschedule(OLD.view);
+            END IF;
+        END IF;
+        RETURN NEW;
+    END;
+' LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS t_on_update_on_views ON "views";
+CREATE TRIGGER t_on_update_on_views
+    AFTER UPDATE
+    ON "views"
+    FOR EACH ROW
+EXECUTE FUNCTION on_update_on_views();
 
 -- Create a trigger function to stop the cron job, and stop streaming events to a view/event handler.
 CREATE OR REPLACE FUNCTION on_delete_on_views() RETURNS trigger AS

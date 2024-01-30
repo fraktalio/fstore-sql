@@ -83,7 +83,7 @@ docker compose up -d
 
 These examples are using SQL to interact with the database. Hopefully, you will find them useful, and you can use them in your application.
 
-Import the [schema.sql](schema.sql) into your database.
+Import the [schema.sql (imported by default)](schema.sql) and [extensions.sql (not imported!)](extensions.sql) into your database.
 
 
 ### Event Sourcing
@@ -141,7 +141,7 @@ You can configure the `view` to publish event(s) every 1 second, starting from 2
 
 ```sql
 SELECT *
-from register_view('view1', 1, '2023-01-28 12:17:17.078384', 300, 'https://localhost:3000/functions/v1/event-handler');
+from register_view('view1', '2023-01-28 12:17:17.078384', 300, 1, 'https://localhost:3000/functions/v1/event-handler');
 ```
 
 #### 5. Appending two events for another decider `2ac37f68-9d66-11ed-a8fc-0242ac120002`.
@@ -179,6 +179,7 @@ You can:
 
 
 ```sql
+-- Get first 100 events 
 SELECT * from stream_events('view1', 100);
 
 SELECT * from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1);

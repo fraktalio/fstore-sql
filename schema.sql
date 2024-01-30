@@ -156,14 +156,14 @@ CREATE TABLE IF NOT EXISTS views
 (
     -- view identifier/name
     "view"              TEXT,
-    -- pooling_delay represent the frequency of pooling the database for the new events, measured in seconds / 1 second, by default
-    "pooling_delay_s"   BIGINT                   DEFAULT 1     NOT NULL,
     -- the point in time form where the event streaming/pooling should start / NOW is by default, but you can specify the binging of time if you want
     "start_at"          TIMESTAMP                DEFAULT NOW() NOT NULL,
     -- the timeout for the lock / 300 seconds by default
     -- so you have 300 seconds to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
     "lock_timeout_s"    BIGINT                   DEFAULT 300   NOT NULL,
-    -- the url of the edge function that will be called for each event
+    -- pooling_delay represent the frequency of pooling the database for the new events, measured in seconds / NULL by default, which means that the pooling will be done by the client itself, with the frequency that it wants.
+    "pooling_delay_s"   BIGINT                   DEFAULT NULL,
+    -- the url of the edge function that will be called for each event / NULL by default, which means that the pooling will be done by the client itself, and not pushed to the edge function.
     "edge_function_url" TEXT                     DEFAULT NULL,
     -- the timestamp of the view insertion.
     "created_at"        TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
@@ -369,18 +369,24 @@ CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID, v_decider TEXT)
 -- #######################################################################################
 
 -- API: Register a `view` (responsible for streaming events to concurrent consumers)
--- Once the `view` is registered you can start `read_events` which will stream events by pooling database with delay, filtering `events` that are created after `start_at` timestamp
--- Example of usage: SELECT * from register_view('view1', 1, '2023-01-23 12:17:17.078384')
+-- Once the `view` is registered you can start using `stream_events` which will stream events by pooling database with delay `v_pooling_delay_s`, filtering `events` that are created after `v_start_at` timestamp
+-- Example of usage: SELECT * from register_view('view1', '2023-01-23 12:17:17.078384', 400)
 CREATE OR REPLACE FUNCTION register_view(v_view TEXT,
-                                         v_pooling_delay_s BIGINT DEFAULT 1,
                                          v_start_at TIMESTAMP DEFAULT NOW(),
                                          v_lock_timeout_s BIGINT DEFAULT 300,
+                                         v_pooling_delay_s BIGINT DEFAULT NULL,
                                          v_edge_function_url TEXT DEFAULT NULL
 )
     RETURNS SETOF "views" AS
 '
-    INSERT INTO "views" ("view", pooling_delay_s, start_at, lock_timeout_s, edge_function_url)
-    VALUES (v_view, v_pooling_delay_s, v_start_at, v_lock_timeout_s, v_edge_function_url)
+    INSERT INTO "views" ("view", start_at, lock_timeout_s, pooling_delay_s, edge_function_url)
+    VALUES (v_view, v_start_at, v_lock_timeout_s, v_pooling_delay_s, v_edge_function_url)
+    ON CONFLICT ON CONSTRAINT "views_pkey"
+        DO UPDATE SET "updated_at"        = NOW(),
+                      "start_at"          = EXCLUDED."start_at",
+                      "lock_timeout_s"    = EXCLUDED."lock_timeout_s",
+                      "pooling_delay_s"   = EXCLUDED."pooling_delay_s",
+                      "edge_function_url" = EXCLUDED."edge_function_url"
     RETURNING *;
 ' LANGUAGE sql;
 
@@ -389,7 +395,7 @@ CREATE OR REPLACE FUNCTION register_view(v_view TEXT,
 -- They can read events concurrently from different decider_id streams (partitions) by preserving the ordering of events within decider_id stream (partition) only!
 -- Example of usage: SELECT * from stream_events('view1', 100, 300)
 -- It will return `v_limit` events at maximum! (if there are less events in the stream, it will return less)
--- Notice: all returned events belong to different decider_id's (partitions) and you should be able to handle them in parallel and in any order. Also, the `ack_event()` function could be called for each event separately in a safe way!
+-- Notice: all returned events belong to different decider_id's (partitions) and you should be able to handle them in parallel, and in any order. Also, the `ack_event()` function could be called for each event separately in a safe way!
 -- Notice: The lock is set for 5 minutes / 300 seconds by default, so you have 5 minutes to process the event and call `ack_event()` function to unlock the stream (partition) for further reading, otherwise the lock will be released automatically and the event will be available for reading again!
 CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT, v_limit INT DEFAULT 1, v_seconds INT DEFAULT 300)
     RETURNS SETOF events AS

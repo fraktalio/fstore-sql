@@ -9,6 +9,5 @@ services:
     command: postgres -c config_file=/etc/postgresql/postgresql.conf
     volumes:
       - ./schema.sql:/docker-entrypoint-initdb.d/schema.sql
-#      - ./extensions.sql:/docker-entrypoint-initdb.d/extensions.sql
     environment:
       POSTGRES_PASSWORD: mysecretpassword
