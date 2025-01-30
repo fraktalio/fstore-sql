@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS events
     "created_at"    TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     -- ordering sequence/offset for all events, in all deciders.
     "offset"        BIGSERIAL PRIMARY KEY,
+    -- postgres transaction id
+    "transaction_id" XID8 DEFAULT pg_current_xact_id() NOT NULL,
     FOREIGN KEY ("decider", "event", "event_version") REFERENCES deciders ("decider", "event", "event_version")
 );
 
