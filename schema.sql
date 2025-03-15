@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS events
     -- decider name/type. Part of a composite foreign key to `deciders`
     "decider"       TEXT    NOT NULL,
     -- identifier for the decider
-    "decider_id"    UUID    NOT NULL,
+    "decider_id"    TEXT    NOT NULL,
     -- event data in JSON format
     "data"          JSONB   NOT NULL,
     -- command ID causing this event
@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS locks
     -- view identifier/name
     "view"         TEXT                                                    NOT NULL,
     -- business identifier for the decider
-    "decider_id"   UUID                                                    NOT NULL,
+    "decider_id"   TEXT                                                    NOT NULL,
     -- current offset of the event stream for decider_id
     "offset"       BIGINT                                                  NOT NULL,
     -- the offset of the last event being processed
@@ -333,7 +333,7 @@ CREATE OR REPLACE FUNCTION register_decider_event(v_decider TEXT, v_event TEXT, 
 
 -- API: Append/Insert new 'event'
 -- Example of usage: SELECT * from append_event('event1', '21e19516-9bda-11ed-a8fc-0242ac120002',1, 'decider1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', '{}', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', null)
-CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider TEXT, v_decider_id UUID, v_data JSONB,
+CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider TEXT, v_decider_id TEXT, v_data JSONB,
                                         v_command_id UUID, v_previous_id UUID, v_event_version BIGINT DEFAULT 1)
     RETURNS SETOF events AS
 '
@@ -345,7 +345,7 @@ CREATE OR REPLACE FUNCTION append_event(v_event TEXT, v_event_id UUID, v_decider
 -- API: Get events by decider_id and decider type
 -- Used by the Decider/Entity to get list of events from where it can source its own state
 -- Example of usage: SELECT * FROM get_events('f156a3c4-9bd8-11ed-a8fc-0242ac120002', 'decider1')
-CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID, v_decider TEXT)
+CREATE OR REPLACE FUNCTION get_events(v_decider_id TEXT, v_decider TEXT)
     RETURNS SETOF events AS
 '
     SELECT *
@@ -356,7 +356,7 @@ CREATE OR REPLACE FUNCTION get_events(v_decider_id UUID, v_decider TEXT)
 ' LANGUAGE sql;
 
 -- API: Get the lass event by decider_id and decider type
-CREATE OR REPLACE FUNCTION get_last_event(v_decider_id UUID, v_decider TEXT)
+CREATE OR REPLACE FUNCTION get_last_event(v_decider_id TEXT, v_decider TEXT)
     RETURNS SETOF events AS
 '
     SELECT *
@@ -433,7 +433,7 @@ CREATE OR REPLACE FUNCTION stream_events(v_view_name TEXT, v_limit INT DEFAULT 1
 -- API: Acknowledge that event with `decider_id` and `offset` is processed successfully by the view
 -- Essentially, it will unlock current decider_id stream (partition) for further reading
 -- Example of usage: SELECT * from ack_event('view1', 'f156a3c4-9bd8-11ed-a8fc-0242ac120002', 1)
-CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id uuid, v_offset BIGINT)
+CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id TEXT, v_offset BIGINT)
     RETURNS SETOF "locks" AS
 '
 
@@ -446,7 +446,7 @@ CREATE OR REPLACE FUNCTION ack_event(v_view TEXT, v_decider_id uuid, v_offset BI
 ' LANGUAGE sql;
 
 -- API: NacK with `decider_id` - it will unlock current decider_id stream (partition) for reading the event again
-CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id UUID)
+CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id TEXT)
     RETURNS SETOF "locks" AS
 '
     UPDATE locks
@@ -457,7 +457,7 @@ CREATE OR REPLACE FUNCTION nack_event(v_view TEXT, v_decider_id UUID)
 ' LANGUAGE sql;
 
 -- API: Schedule NacK with `decider_id` - it will unlock current decider_id stream (partition) for reading the event again after `v_milliseconds` delay
-CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id UUID, v_milliseconds BIGINT)
+CREATE OR REPLACE FUNCTION schedule_nack_event(v_view TEXT, v_decider_id TEXT, v_milliseconds BIGINT)
     RETURNS SETOF "locks" AS
 '
     UPDATE locks
